@@ -1,0 +1,361 @@
+---
+title: "CS5801 Coursework Template Proforma"
+author: "2371131"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document: default
+  html_notebook: default
+version: 1
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+This R markdown walks through the analysis of cars data to predict the price and also the likelihood of the car being sold by the first owner
+
+## Loading the required libraries
+
+```{r}
+# Add code here to load all the required libraries with `library()`.  
+# Do not include any `install.package()` for any required packages in this rmd file.
+library(validate)
+library(tidyverse)
+library(knitr)
+library(vcdExtra)
+library(Hmisc)
+library(fastDummies)
+```
+
+# 1. Organise and clean the data
+
+## 1.1 Subset the data into the specific dataset allocated
+
+The below code subsets the data into specific dataset based on student ID
+
+```{r}
+SID <- 2371131
+SIDoffset <- (SID %% 50) + 1
+load("car-analysis-data.Rda")
+mydf <- cars.analysis[seq(from=SIDoffset,to=nrow(cars.analysis),by=50),]
+```
+
+## 1.2 Data quality analysis plan
+
+Data quality analysis plan constitute of the following steps (in the order):
+
+1.  Eyeball the data frame `mydf`
+2.  Check the structure of `mydf` to learn which variables are numerical
+    & which are categorical
+3.  Check the size of the data frame - nrow, ncol
+4.  Check number of distinct values taken by categorical variables
+5.  Get summary statistics of numerical variables
+6.  Identify the number of NAs for each variable
+
+## 1.3 Data quality analysis findings
+
+Here we implement the above mentioned data quality exploration plan.
+
+Looking at the structure of the dataframe, In total there are 16 variables, of which there are 3 categorical variables and the rest are numerical.Brand, Fuel and Drivetrain are categorical variables
+
+But on observing closely we realize that we could benefit from exploring 'Year' variable as a categorical variable. This would help us understand the variable distribution better, if the number of distinct values is low. It would be further explored using distribution plots if the values range is wide.
+
+```{r}
+#Check the first few rows of the data frame to understand the data present
+head(mydf)
+```
+
+```{r}
+#Gives the column names of the dataframe
+names(mydf)
+
+#Examine the dataframe structure
+str(mydf)
+
+# Examine the number of rows in dataframe
+nrow(mydf)
+
+# Examine the number of columns in dataframe
+ncol(mydf)
+
+#Table function for categorical columns to examine the frequencies
+table(mydf$brand)
+table(mydf$year)
+table(mydf$fuel)
+table(mydf$drivetrain)
+
+#using summary function only numeric variables and removing categorical variables
+cat_vars <- c('brand','year','fuel','drivetrain')
+summary(mydf[,- which(names(mydf) %in% cat_vars)])
+```
+
+```{r}
+#correcting the Fuel variable with misspelling
+mydf[mydf$fuel=="Pertol","fuel"] <- "Petrol"
+mydf[mydf$fuel=="Unknown","fuel"] <- NA
+
+#imputing the Fuel variale unknown values with Mode which is petrol
+mydf[is.na(mydf$fuel),"fuel"] <- "Petrol"
+
+#imputing all the missing values of the numeric columns with median.
+mydf$engine_size <- impute(mydf$engine_size, median)
+mydf$min_mpg <- impute(mydf$min_mpg, median)
+mydf$max_mpg <- impute(mydf$max_mpg, median)
+mydf$damaged <- impute(mydf$damaged, median)
+mydf$first_owner <- impute(mydf$first_owner, median)
+```
+
+## 1.4 Data cleaning
+
+Using table function to check for the distinct values of the categorical
+variables reveals the following insights:
+
+1.  Brand has 25 distinct values with 'suzuki' and 'Audi' having less than 10 observations each. This could play a role in reliability of the insights drawn related to them.
+2.  'Year' has more observations for the recent years
+3.  Fuel variable is heavily skewed towards petrol (more observations) and has a possible data error - 'Pertol' could supposedly be 'Petrol'. So this is corrected and changed to petrol. There are 2 observations with 'unknown' value. The two values are treated as missing and marked as 'NA'. The values are then imputed with the 'mode' considering the skewness towards petrol.
+4.  drivetrain variable has 3meaningful values but also has 3  observations with 'unknown' value. These values are treated as missing and marked as 'NA'. The values are then imputed with the 'mode'
+
+Summary on numerical variables reveals that
+
+1. Mileage has observations with value as zero. It can be assumed that these cars are never driven
+2. there are NAs in engine_size, min_mpg, max_mpg, damaged, first_owner variables
+3. min_mpg has zero as value and max_mpg has zero & negative values
+4. Missing values for the numerical columns are imputed with median value
+
+# 2. Exploratory Data Analysis (EDA)
+
+## 2.1 EDA plan
+
+Exploratory data analysis plan includes exploring the data distributions of the continuous variables through histogram plots. Six univariate plots are built one for each of 'mileage', 'year', 'engine_size', 'min_mpg' & 'max_mpg'
+
+Then, bi-variate plots are built to explore relationship between the target variables and predictor variables. A mosaic plot shall be used when both the variables are binary, a box plot shall be used when one variable is binary/categorical and the other is numerical and a scatter plot shall be used when both the variables are numerical
+
+## 2.2 EDA execution
+
+Below are the univariate plots showing variable distributions
+```{r}
+
+#Histogram for the continuous variables
+hist(mydf$year, main="Histogram of Year", xlab="Year")
+
+hist(mydf$mileage, main="Histogram of mileage", xlab="mileage")
+
+hist(mydf$engine_size, main="Histogram of Engine size", xlab="Engine size")
+
+hist(mydf$min_mpg, main="Histogram of Minimum MPG", xlab="Min MPG")
+
+hist(mydf$max_mpg, main="Histogram of Maximum MPG", xlab="Max MPG")
+
+hist(mydf$price, main="Histogram of Price", xlab="Price")
+```
+
+
+Below are the bi-variate plots for 'price' target variable
+```{r}
+
+#box plot for categorical variables and price
+boxplot(mydf$price~mydf$heated_seats, main="Price distribution vs Heated seats", xlab="Heated seats", ylab="Price")
+
+boxplot(mydf$price~mydf$third_row_seating, main="Price distribution vs Third row seating", xlab="Third row seating", ylab="Price")
+
+boxplot(mydf$price~mydf$bluetooth, main="Price distribution vs Bluetooth", xlab="Bluetooth", ylab="Price")
+
+boxplot(mydf$price~mydf$navigation_system, main="Price distribution vs Navigation System", xlab="Navigation system", ylab="Price")
+
+boxplot(mydf$price~mydf$first_owner, main="Price distribution vs First owner", xlab="First owner", ylab="Price")
+
+boxplot(mydf$price~mydf$damaged, main="Price distribution vs Damaged", xlab="Damaged", ylab="Price")
+
+boxplot(mydf$price~mydf$automatic_transmission, main="Price distribution vs Auto-transmission", xlab="Auto-transmission", ylab="Price")
+
+boxplot(mydf$price~mydf$fuel, main="Price distribution vs Fuel", xlab="Fuel", ylab="Price")
+
+boxplot(mydf$price~mydf$drivetrain, main="Price distribution vs Drivetrain", xlab="Drive train", ylab="Price")
+```
+
+```{r}
+#Scatter plots
+ggplot(mydf, aes(x=price, y=mileage)) + geom_point() + ggtitle("Plot of x vs y") + theme_classic()
+
+ggplot(mydf, aes(x=price, y=max_mpg)) + geom_point() + ggtitle("Plot of x vs y") + theme_classic()
+```
+
+Below are the bi-variate plots for 'first_owner' target variable
+
+```{r}
+#mosaic plots with other binary variables
+mosaic(~mydf$first_owner+mydf$heated_seats, data=mydf,main ="First owner vs Heated seats")
+mosaic(~mydf$first_owner+mydf$third_row_seating, data=mydf,main ="First owner vs Third row seating")
+mosaic(~mydf$first_owner+mydf$bluetooth, data=mydf,main ="First owner vs Bluetooth")
+mosaic(~mydf$first_owner+mydf$navigation_system, data=mydf,main ="First owner vs Navigation system")
+mosaic(~mydf$first_owner+mydf$damaged, data=mydf,main ="First owner vs Damaged")
+mosaic(~mydf$first_owner+mydf$automatic_transmission, data=mydf,main ="First owner vs Auto Transmission")
+```
+
+```{r}
+#boxplots with the continuous variables
+boxplot(mydf$mileage~mydf$first_owner, main="Mileage distribution vs First owner", xlab="First owner", ylab="Mileage")
+boxplot(mydf$year~mydf$first_owner, main="Year distribution vs First owner", xlab="First owner", ylab="Year")
+boxplot(mydf$price~mydf$first_owner, main="Price distribution vs First owner", xlab="First owner", ylab="Price")
+```
+
+## 2.3 EDA summary of results
+
+
+Data exploration visualizations from the previous section show the following insights:
+
+1. Number of observations for the period between 2000 & 2020 is much higher than those for the rest of the years in the dataset
+2. Looking at the box plots, they all show what we intuite and are not exceptions. FOr example the mean price of the auto transmission car is higher than the one without it.
+3. There are very few observations with mileage greater than 150K 
+4. Majority of the observations have <=4 engine size but the distribution doesn't look concerning
+5. 'min_mpg' & 'max_mpg' variable values are concentrated between 10 & 30.
+6. The price distribution is normal and not skewed.
+7. Relationship between price and year looks interesting. Price seem to fall as the cars gets relatively older but this changes when the cars are older than (approx) year 2000.
+8. It can be seen from the scatter plot between mileage and price that as the mileage is increased the price has started falling. That means used cars has less price.
+
+## 2.4 Additional insights and issues
+
+Plan is to treat observations meeting the below conditions as outlier:
+  1) 'year' less than 2000 
+  2) 'mileage' greater than 150K
+  3) 'mpg' outside of the range 10 to 40
+
+For the above outliers, the treatment shall be done as below:
+1. 'year' values are to be restricted to 2000 if the original value is less than 2000
+2. 'mileage' values are to be restricted to 150K if the original data value is greater than 150K
+3. 'mpg' variables are values are restricted to 10 if the original value is less than 10 and similarly, to 40 if original is greater than 40
+
+Due to the imputation, model could potentially have poorer performance on old cars and cars with high mileage but is expected to drive better overall model performance
+
+# 3. Modelling
+
+## 3.1 Explain your analysis plan
+
+Analysis plan includes the below steps:
+1. Treating the outliers discussed in the previous section 
+2. Looking for any highly correlated variables and dropping them.
+3. Creating dummy variables from categorical variables to pass them to the model
+4. Building a linear regression as the dependent variable is continuous
+
+'min_mpg' & 'max_mpg' are highly correlated and hence, dropping one column would help with reducing multi-colinearity when modelling.
+
+As the dependent variable is continuous and the independent variables constitutes of both continuous and categorical we will be using linear regression model.
+
+
+## 3.2 Build a model for car price
+
+```{r}
+#Outliers handling for the variales
+mydf[mydf$year<2000,"year"] = 2000
+mydf[mydf$mileage>150000,"mileage"] = 150000
+mydf[mydf$min_mpg<10,"min_mpg"] = 10 
+mydf[mydf$min_mpg>40,"min_mpg"]=40 
+mydf[mydf$max_mpg<10,"max_mpg"] = 10 
+mydf[mydf$max_mpg>40,"max_mpg"]= 40
+```
+
+```{r}
+#Checking for correlation between numeric variables
+cat_vars <- c('brand','year','fuel','drivetrain')
+cor(mydf[,- which(names(mydf) %in% cat_vars)])
+```
+
+```{r}
+#convert categorical variables into dummy variables
+cat_vars <- c('brand','fuel','drivetrain') 
+dummy_vars <- dummy_cols(mydf, select_columns = cat_vars, remove_selected_columns = TRUE, remove_first_dummy = TRUE)
+mydf_w_dummyvars = dummy_vars[,!(names(dummy_vars) %in% c("drivetrain_Unknown","fuel_Unknown"))]
+```
+
+```{r}
+#Running the linear regression model
+price_lm<-lm(mydf_w_dummyvars$price~., data=mydf_w_dummyvars)
+#Summary statistics of the linear model
+summary(price_lm)
+```
+
+```{r}
+#Graphical diagnostics of the model
+plot(price_lm)
+```
+
+## 3.3 Critique model using relevant diagnostics
+
+Model is showing insights that agree with general intuition. For
+example, year has a positive coefficient - meaning newer cars tend to
+have higher prices and mileage has negative coefficient - meaning cars
+with high mileage tend to have lower prices
+
+This model has an adjusted R-squared of 0.7763 which is relatively a
+good fit but the model has many variables that are not significant.
+
+## 3.4 Suggest and implement improvements to your model
+
+The model performance can be improved by reducing the variables in the
+model. Using step function might help in reducing the number of
+variables and in turn help in improving the efficiency of model.
+
+```{r}
+#using step function for linear regression model
+price_lm_step <- step(price_lm)
+```
+
+```{r}
+#Summary statistics of the step linear regression model
+summary(price_lm_step)
+```
+
+```{r}
+#Graphical diagnostics of the model
+plot(price_lm_step)
+```
+
+Using step function to reduce independent variables resulted in a model
+with slight improvement in adjusted R-squared and statistically
+significant variables except for two. These two variables also have
+p-value about 0.15.
+
+I propose using this final model as it has significant variables and
+better R-squared value.
+
+# 4. Modelling another dependent variable
+
+## 4.1 Model the likelihood of a car being sold by the first owner (using the first_owner variable provided).
+
+As the dependent variable is binary classification(likelihood of first
+owner selling the car), logistic regression will be used to model it
+
+```{r}
+#Running the logistic regression
+first_owner_lr<-glm(mydf_w_dummyvars$first_owner~., family=binomial, data=mydf_w_dummyvars)
+summary(first_owner_lr)
+```
+
+```{r}
+#Using step function to reduce the variables
+first_owner_lr_step <- step(first_owner_lr)
+summary(first_owner_lr_step)
+```
+
+```{r}
+#Running the logistic model with interaction effects
+first_owner_lr_final<-glm(mydf_w_dummyvars$first_owner~mydf_w_dummyvars$year+mydf_w_dummyvars$mileage+mydf_w_dummyvars$brand_Kia+mydf_w_dummyvars$brand_FIAT+mydf_w_dummyvars$brand_Suzuki+mydf_w_dummyvars$brand_Toyota+mydf_w_dummyvars$`drivetrain_Front-wheel Drive` + mydf_w_dummyvars$year*mydf_w_dummyvars$mileage, family=binomial, data=mydf_w_dummyvars)
+summary(first_owner_lr_final)
+```
+
+The model selection strategy involves starting with a maximal model,
+then exploring whether there is any benefit from including interactions
+and finally using the step function to obtain a minimum viable model.
+
+Running the logistic model shows that there are only 5 variables that are significant and all the other variables are insignificant.
+
+As there are many variables that are not significant, we will attempt to
+reduce the variables so as to get significance before checking for
+interaction effects.
+
+Using step function reduced the number of explanatory variables to a
+much smaller number. As a next step, will be attempting to further
+remove variables that are not significant and include interaction terms.
+
+The final model appears to be the best model compared to other models
+tested. Final model has only significant variables and has the best AIC
+value compared to others.
